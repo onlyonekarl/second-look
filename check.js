@@ -25,6 +25,7 @@ export default async function handler(req, res) {
     );
     return res.status(200).json({
       simOk: r.simOk,
+      simReason: r.simReason,
       sentLamports: r.sentLamports === null ? null : r.sentLamports.toString(),
       flags: r.flags,
       transfers: r.transfers,
