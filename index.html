@@ -105,6 +105,8 @@
     }
     #details p.warn { color: var(--red); }
     #details p.warn::before { background: var(--red); }
+    #details p.note { color: var(--amber); }
+    #details p.note::before { background: var(--amber); }
     footer { color: var(--muted); font-size: 0.8rem; text-align: center; margin-top: 2rem; }
     @media (max-width: 480px) { h1 { font-size: 1.6rem; } }
   </style>
@@ -186,10 +188,10 @@
       $('verdict').textContent = text;
     }
 
-    function addDetail(text, warn = false) {
+    function addDetail(text, cls = '') {
       const p = document.createElement('p');
       p.textContent = text;
-      if (warn) p.className = 'warn';
+      if (cls) p.className = cls;
       $('details').appendChild(p);
     }
 
@@ -205,40 +207,4 @@
         const { value } = await rpc.getBalance(address(owner)).send();
         $('wallet').textContent = `${short(owner)} · ${Number(value) / 1e9} SOL on devnet`;
         $('connect').textContent = 'Connected';
-        $('connect').disabled = true;
-      } catch (err) {
-        $('wallet').textContent = `Could not connect: ${err.message}`;
-      }
-    };
-
-    $('check').onclick = async () => {
-      $('details').innerHTML = '';
-      const base64Tx = $('tx').value.trim();
-      if (!base64Tx) {
-        showVerdict('', 'Paste a transaction first.');
-        return;
-      }
-      try {
-        const r = await checkTransaction(base64Tx, owner);
-
-        if (!r.simOk) addDetail('The simulation failed, so this transaction would not run as written.', true);
-        if (!owner) addDetail('Connect Phantom to see how much SOL would leave your wallet.');
-        else if (r.simOk) addDetail(`SOL leaving your wallet, including the fee: ${Number(r.sentLamports) / 1e9} SOL`);
-        r.flags.forEach((f) => addDetail(f, true));
-
-        if (r.verdict === 'danger' && r.flags.length > 0) {
-          showVerdict('danger', 'Do not sign until you understand these flags.');
-        } else if (r.verdict === 'danger') {
-          showVerdict('danger', 'Do not sign. This transaction would fail.');
-        } else if (r.verdict === 'review') {
-          showVerdict('review', 'Review carefully. SOL would leave your wallet.');
-        } else {
-          showVerdict('ok', 'No approval or ownership flags found.');
-        }
-      } catch (err) {
-        showVerdict('danger', `Could not check this transaction: ${err.message}`);
-      }
-    };
-  </script>
-</body>
-</html>
+        $('connect').
