@@ -5,8 +5,11 @@ import {
   getTransactionDecoder,
 } from '@solana/kit';
 
-const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
-const rpc = createSolanaRpc('https://api.devnet.solana.com');
+// SPL Token and Token-2022 share the same core instruction numbers
+const TOKEN_PROGRAMS = [
+  'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', // SPL Token
+  'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb', // Token-2022
+];
 
 function decodeMessage(base64Tx) {
   const bytes = Uint8Array.from(atob(base64Tx), (c) => c.charCodeAt(0));
@@ -19,19 +22,29 @@ export function feePayerOf(base64Tx) {
   return decodeMessage(base64Tx).staticAccounts[0];
 }
 
-// Checks one base64 transaction. Pass the wallet to check (optional).
-export async function checkTransaction(base64Tx, owner = null) {
+// Checks one base64 transaction. Optional: the wallet to check, and the RPC URL.
+// The RPC URL defaults to devnet.
+export async function checkTransaction(
+  base64Tx,
+  owner = null,
+  rpcUrl = 'https://api.devnet.solana.com',
+) {
+  const rpc = createSolanaRpc(rpcUrl);
   const message = decodeMessage(base64Tx);
 
-  const flags = [];
+  const flags = [];     // approvals and ownership changes: do not sign
+  const transfers = []; // token transfers: review
   for (const ix of message.instructions) {
-    if (message.staticAccounts[ix.programAddressIndex] !== TOKEN_PROGRAM) continue;
+    if (!TOKEN_PROGRAMS.includes(message.staticAccounts[ix.programAddressIndex])) continue;
     const kind = ix.data[0];
     if (kind === 4 || kind === 13) {
       flags.push('Token approval: this gives another address the right to spend your tokens.');
     }
     if (kind === 6) {
       flags.push('Ownership change: this hands control of a token account to someone else.');
+    }
+    if (kind === 3 || kind === 12) {
+      transfers.push('Token transfer: this moves tokens from one token account to another. Check the recipient and the amount.');
     }
   }
 
@@ -49,7 +62,7 @@ export async function checkTransaction(base64Tx, owner = null) {
 
   let verdict = 'ok';
   if (flags.length > 0 || !simOk) verdict = 'danger';
-  else if (sentLamports !== null && sentLamports > 0n) verdict = 'review';
+  else if ((sentLamports !== null && sentLamports > 0n) || transfers.length > 0) verdict = 'review';
 
-  return { simOk, simError: value.err, sentLamports, flags, verdict };
+  return { simOk, simError: value.err, sentLamports, flags, transfers, verdict };
 }
