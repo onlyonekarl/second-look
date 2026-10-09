@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Second Look</title>
+  <style>
+    :root {
+      --bg: #0E1116;
+      --panel: #161B22;
+      --border: #2A313C;
+      --text: #E6EDF3;
+      --muted: #8B949E;
+      --green: #14F195;
+      --purple: #9945FF;
+      --amber: #F5A524;
+      --red: #FF5C5C;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.5;
+    }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+    header { display: flex; align-items: center; gap: 0.9rem; }
+    header svg { width: 52px; height: 52px; flex: none; }
+    h1 { margin: 0; font-size: 2rem; letter-spacing: -0.02em; }
+    .tagline { color: var(--muted); margin: 0.5rem 0 1.75rem; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .card h2 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin: 0 0 0.9rem;
+    }
+    .row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    .pill {
+      font-size: 0.75rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid var(--green);
+      color: var(--green);
+    }
+    button, .open-phantom {
+      font: inherit;
+      font-weight: 600;
+      color: #0E1116;
+      background: linear-gradient(90deg, var(--green), var(--purple));
+      border: 0;
+      border-radius: 10px;
+      padding: 0.7rem 1.1rem;
+      cursor: pointer;
+      display: inline-block;
+      text-decoration: none;
+    }
+    button:hover, .open-phantom:hover { filter: brightness(1.08); }
+    button:disabled { opacity: 0.55; cursor: default; }
+    .open-phantom { margin-top: 0.75rem; }
+    .hint { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.6rem; display: block; }
+    textarea {
+      width: 100%;
+      min-height: 9rem;
+      resize: vertical;
+      padding: 0.8rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 0.85rem;
+    }
+    textarea:focus { outline: 2px solid var(--purple); outline-offset: 1px; }
+    #wallet { color: var(--muted); margin: 0.9rem 0 0; word-break: break-all; }
+    #verdict {
+      font-weight: 600;
+      padding: 0.9rem 1rem;
+      border-radius: 10px;
+      background: var(--bg);
+      border-left: 6px solid var(--muted);
+      margin-bottom: 0.75rem;
+    }
+    #verdict.ok { border-left-color: var(--green); }
+    #verdict.review { border-left-color: var(--amber); }
+    #verdict.danger { border-left-color: var(--red); }
+    #details p { margin: 0.45rem 0; padding-left: 1.1rem; position: relative; }
+    #details p::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.6em;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+    #details p.warn { color: var(--red); }
+    #details p.warn::before { background: var(--red); }
+    #details p.note { color: var(--amber); }
+    #details p.note::before { background: var(--amber); }
+    footer { color: var(--muted); font-size: 0.8rem; text-align: center; margin-top: 2rem; }
+    @media (max-width: 480px) { h1 { font-size: 1.6rem; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <svg viewBox="0 0 512 512" aria-hidden="true">
+        <defs>
+          <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#14F195"/>
+            <stop offset="1" stop-color="#9945FF"/>
+          </linearGradient>
+        </defs>
+        <rect width="512" height="512" rx="96" fill="#0E1116"/>
+        <path d="M64 256 Q256 40 448 256 Q256 472 64 256 Z" fill="none" stroke="#E6EDF3" stroke-width="16" stroke-linejoin="round"/>
+        <circle cx="256" cy="256" r="92" fill="url(#g)"/>
+        <circle cx="256" cy="256" r="40" fill="#0E1116"/>
+        <path d="M234 256 L251 273 L280 240" fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <h1>Second Look</h1>
+    </header>
+    <p class="tagline">A safety check for Solana transactions, before you sign.</p>
+
+    <div class="card">
+      <h2>1 · Connect your wallet</h2>
+      <div class="row">
+        <button id="connect">Connect Phantom</button>
+        <span class="pill">Mainnet</span>
+      </div>
+      <p id="wallet">Not connected yet.</p>
+      <div id="phantomBox" hidden>
+        <a id="openInPhantom" class="open-phantom" href="#">Open in Phantom app</a>
+        <p class="hint" style="margin-top: 0.5rem;">On a phone, this opens the page in Phantom's browser so you can connect.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2 · Transaction</h2>
+      <label class="hint" for="tx">Paste the base64 transaction that a dApp asks you to sign.</label>
+      <textarea id="tx" placeholder="Paste a base64 transaction here"></textarea>
+      <div class="row" style="margin-top: 0.75rem;">
+        <button id="check">Check transaction</button>
+      </div>
+    </div>
+
+    <div class="card" id="resultsCard" hidden>
+      <h2>3 · Result</h2>
+      <div id="verdict"></div>
+      <div id="details"></div>
+    </div>
+
+    <div class="card">
+      <h2>What this checks, and what it doesn't</h2>
+      <p class="hint">It checks: SOL leaving your wallet, token balances leaving your wallet, token approvals, ownership changes (including handing an account to another program), token transfers (including ones made by other programs in the same transaction), and two Token-2022 risks on tokens involved: permanent delegates and transfer hooks. This covers SPL Token and Token-2022.</p>
+      <p class="hint">It doesn't check: other Token-2022 extensions, token accounts the transaction creates, or whether a website or program is trustworthy. Balance changes and transfers made by other programs need a successful simulation to be checked.</p>
+      <p class="hint">A passing result is not a guarantee. Use it as one check among several, and never sign anything you don't understand.</p>
+    </div>
+
+    <footer>Second Look simulates transactions on Solana mainnet. It never signs or sends anything.</footer>
+  </div>
+
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const short = (a) => `${a.slice(0, 6)}…${a.slice(-6)}`;
+    let owner = null;
+
+    // On a phone without Phantom, offer a button that opens this page in Phantom's browser
+    if (!window.phantom?.solana && /Android|iPhone|iPad/i.test(navigator.userAgent)) {
+      $('openInPhantom').href = `https://phantom.app/ul/browse/${encodeURIComponent(location.href)}?ref=${encodeURIComponent(location.origin)}`;
+      $('phantomBox').hidden = false;
+    }
+
+    function showVerdict(kind, text) {
+      $('resultsCard').hidden = false;
+      $('verdict').className = kind;
+      $('verdict').textContent = text;
+    }
+
+    function addDetail(text, cls = '') {
+      const p = document.createElement('p');
+      p.textContent = text;
+      if (cls) p.className = cls;
+      $('details').appendChild(p);
+    }
+
+    $('connect').onclick = async () => {
+      const provider = window.phantom?.solana;
+      if (!provider?.isPhantom) {
+        $('wallet').textContent = 'Phantom not found here. On a computer, install the Phantom extension and reload. On a phone, tap Open in Phantom app below.';
+        return;
+      }
+      try {
+        const { publicKey } = await provider.connect();
+        owner = publicKey.toString();
+        $('wallet').textContent = `Connected: ${short(owner)}`;
+        $('connect').textContent = 'Connected';
+        $('connect').disabled = true;
+      } catch (err) {
+        $('wallet').textContent = `Could not connect: ${err.message}`;
+      }
+    };
+
+    $('check').onclick = async () => {
+      $('details').innerHTML = '';
+      const transaction = $('tx').value.trim();
+      if (!transaction) {
+        showVerdict('', 'Paste a transaction first.');
+        return;
+      }
+      showVerdict('', 'Checking…');
+
+      try {
+        const res = await fetch('/api/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transaction, owner }),
+        });
+        const r = await res.json();
+        if (!res.ok) {
+          showVerdict('danger', r.error || 'The check failed.');
+          return;
+        }
+
+        const sol = r.sentLamports === null ? null : Number(r.sentLamports) / 1e9;
+
+        if (!r.simOk && r.simReason) addDetail(r.simReason, 'warn');
+        if (!owner) addDetail('Connect Phantom to see how much SOL would leave your wallet.');
+        else if (r.simOk) addDetail(`SOL leaving your wallet, including the fee: ${sol} SOL`);
+        r.flags.forEach((f) => addDetail(f, 'warn'));
+        r.transfers.forEach((t) => addDetail(t, 'note'));
+
+        if (r.flags.length > 0) {
+          showVerdict('danger', 'Do not sign until you understand these flags.');
+        } else if (!r.simOk) {
+          showVerdict('danger', 'Do not sign. This transaction would fail.');
+        } else if (r.verdict === 'review') {
+          const parts = [];
+          if (sol !== null && sol > 0) parts.push('SOL would leave your wallet');
+          if (r.transfers.length > 0) parts.push('tokens would move');
+          showVerdict('review', `Review carefully: ${parts.join(' and ')}.`);
+        } else {
+          showVerdict('ok', 'No approval or ownership flags found.');
+        }
+      } catch (err) {
+        showVerdict('danger', `Could not check this transaction: ${err.message}`);
+      }
+    };
+  </script>
+</body>
+</html>
