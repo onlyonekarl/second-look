@@ -5,27 +5,153 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Second Look</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #222; }
-    textarea { width: 100%; height: 8rem; font-family: monospace; font-size: 0.9rem; box-sizing: border-box; }
-    button { padding: 0.6rem 1rem; font-size: 1rem; margin: 0.5rem 0; cursor: pointer; }
-    #results p { margin: 0.4rem 0; }
-    .warn { color: #b00020; font-weight: bold; }
-    .ok { color: #1b5e20; font-weight: bold; }
+    :root {
+      --bg: #0E1116;
+      --panel: #161B22;
+      --border: #2A313C;
+      --text: #E6EDF3;
+      --muted: #8B949E;
+      --green: #14F195;
+      --purple: #9945FF;
+      --amber: #F5A524;
+      --red: #FF5C5C;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.5;
+    }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+    header { display: flex; align-items: center; gap: 0.9rem; }
+    header svg { width: 52px; height: 52px; flex: none; }
+    h1 { margin: 0; font-size: 2rem; letter-spacing: -0.02em; }
+    .tagline { color: var(--muted); margin: 0.5rem 0 1.75rem; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .card h2 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin: 0 0 0.9rem;
+    }
+    .row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    .pill {
+      font-size: 0.75rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid var(--green);
+      color: var(--green);
+    }
+    button {
+      font: inherit;
+      font-weight: 600;
+      color: #0E1116;
+      background: linear-gradient(90deg, var(--green), var(--purple));
+      border: 0;
+      border-radius: 10px;
+      padding: 0.7rem 1.1rem;
+      cursor: pointer;
+    }
+    button:hover { filter: brightness(1.08); }
+    button:disabled { opacity: 0.55; cursor: default; }
+    .hint { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.6rem; display: block; }
+    textarea {
+      width: 100%;
+      min-height: 9rem;
+      resize: vertical;
+      padding: 0.8rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 0.85rem;
+    }
+    textarea:focus { outline: 2px solid var(--purple); outline-offset: 1px; }
+    #wallet { color: var(--muted); margin: 0.9rem 0 0; word-break: break-all; }
+    #verdict {
+      font-weight: 600;
+      padding: 0.9rem 1rem;
+      border-radius: 10px;
+      background: var(--bg);
+      border-left: 6px solid var(--muted);
+      margin-bottom: 0.75rem;
+    }
+    #verdict.ok { border-left-color: var(--green); }
+    #verdict.review { border-left-color: var(--amber); }
+    #verdict.danger { border-left-color: var(--red); }
+    #details p { margin: 0.45rem 0; padding-left: 1.1rem; position: relative; }
+    #details p::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.6em;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+    #details p.warn { color: var(--red); }
+    #details p.warn::before { background: var(--red); }
+    footer { color: var(--muted); font-size: 0.8rem; text-align: center; margin-top: 2rem; }
+    @media (max-width: 480px) { h1 { font-size: 1.6rem; } }
   </style>
 </head>
 <body>
-  <h1>Second Look</h1>
-  <p>A safety check for Solana transactions, before you sign. Devnet only.</p>
+  <div class="wrap">
+    <header>
+      <svg viewBox="0 0 512 512" aria-hidden="true">
+        <defs>
+          <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#14F195"/>
+            <stop offset="1" stop-color="#9945FF"/>
+          </linearGradient>
+        </defs>
+        <rect width="512" height="512" rx="96" fill="#0E1116"/>
+        <path d="M64 256 Q256 40 448 256 Q256 472 64 256 Z" fill="none" stroke="#E6EDF3" stroke-width="16" stroke-linejoin="round"/>
+        <circle cx="256" cy="256" r="92" fill="url(#g)"/>
+        <circle cx="256" cy="256" r="40" fill="#0E1116"/>
+        <path d="M234 256 L251 273 L280 240" fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <h1>Second Look</h1>
+    </header>
+    <p class="tagline">A safety check for Solana transactions, before you sign.</p>
 
-  <button id="connect">Connect Phantom</button>
-  <p id="wallet">Not connected.</p>
+    <div class="card">
+      <h2>1 · Connect your wallet</h2>
+      <div class="row">
+        <button id="connect">Connect Phantom</button>
+        <span class="pill">Devnet</span>
+      </div>
+      <p id="wallet">Not connected yet.</p>
+    </div>
 
-  <h3>Transaction to check</h3>
-  <textarea id="tx" placeholder="Paste a base64 transaction here"></textarea>
-  <br>
-  <button id="check">Check transaction</button>
+    <div class="card">
+      <h2>2 · Transaction</h2>
+      <label class="hint" for="tx">Paste the base64 transaction that a dApp asks you to sign.</label>
+      <textarea id="tx" placeholder="Paste a base64 transaction here"></textarea>
+      <div class="row" style="margin-top: 0.75rem;">
+        <button id="check">Check transaction</button>
+      </div>
+    </div>
 
-  <div id="results"></div>
+    <div class="card" id="resultsCard" hidden>
+      <h2>3 · Result</h2>
+      <div id="verdict"></div>
+      <div id="details"></div>
+    </div>
+
+    <footer>Second Look simulates transactions on Solana devnet. It never signs or sends anything.</footer>
+  </div>
 
   <script type="module">
     import {
@@ -38,13 +164,20 @@
     const rpc = createSolanaRpc('https://api.devnet.solana.com');
     const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
     const $ = (id) => document.getElementById(id);
+    const short = (a) => `${a.slice(0, 6)}…${a.slice(-6)}`;
     let owner = null;
 
-    function line(text, cls = '') {
+    function showVerdict(kind, text) {
+      $('resultsCard').hidden = false;
+      $('verdict').className = kind;
+      $('verdict').textContent = text;
+    }
+
+    function addDetail(text, warn = false) {
       const p = document.createElement('p');
       p.textContent = text;
-      if (cls) p.className = cls;
-      $('results').appendChild(p);
+      if (warn) p.className = 'warn';
+      $('details').appendChild(p);
     }
 
     $('connect').onclick = async () => {
@@ -57,17 +190,19 @@
         const { publicKey } = await provider.connect();
         owner = publicKey.toString();
         const { value } = await rpc.getBalance(address(owner)).send();
-        $('wallet').textContent = `Connected: ${owner} (devnet balance: ${Number(value) / 1e9} SOL)`;
+        $('wallet').textContent = `${short(owner)} · ${Number(value) / 1e9} SOL on devnet`;
+        $('connect').textContent = 'Connected';
+        $('connect').disabled = true;
       } catch (err) {
         $('wallet').textContent = `Could not connect: ${err.message}`;
       }
     };
 
     $('check').onclick = async () => {
-      $('results').innerHTML = '';
+      $('details').innerHTML = '';
       const base64Tx = $('tx').value.trim();
       if (!base64Tx) {
-        line('Paste a transaction first.', 'warn');
+        showVerdict('', 'Paste a transaction first.');
         return;
       }
       try {
@@ -100,16 +235,17 @@
         const simOk = value.err === null;
         const sent = simOk && owner ? before - (value.accounts?.[0]?.lamports ?? before) : null;
 
-        if (!simOk) line('Simulation failed: this transaction would not run as written.', 'warn');
-        if (!owner) line('Connect Phantom to see how much SOL would leave your wallet.');
-        else if (simOk) line(`SOL leaving your wallet (including fee): ${Number(sent) / 1e9} SOL`);
-        flags.forEach((f) => line(f, 'warn'));
+        if (!simOk) addDetail('The simulation failed, so this transaction would not run as written.', true);
+        if (!owner) addDetail('Connect Phantom to see how much SOL would leave your wallet.');
+        else if (simOk) addDetail(`SOL leaving your wallet, including the fee: ${Number(sent) / 1e9} SOL`);
+        flags.forEach((f) => addDetail(f, true));
 
-        if (flags.length > 0) line('Verdict: do not sign until you understand these flags.', 'warn');
-        else if (sent !== null && sent > 0n) line('Verdict: review carefully. SOL would leave your wallet.', 'warn');
-        else if (simOk) line('Verdict: no approval or ownership flags found.', 'ok');
+        if (flags.length > 0) showVerdict('danger', 'Do not sign until you understand these flags.');
+        else if (!simOk) showVerdict('danger', 'Do not sign. This transaction would fail.');
+        else if (sent !== null && sent > 0n) showVerdict('review', 'Review carefully. SOL would leave your wallet.');
+        else showVerdict('ok', 'No approval or ownership flags found.');
       } catch (err) {
-        line(`Could not check this transaction: ${err.message}`, 'warn');
+        showVerdict('danger', `Could not check this transaction: ${err.message}`);
       }
     };
   </script>
