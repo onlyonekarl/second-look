@@ -144,6 +144,16 @@ export async function checkTransaction(
 ) {
   const rpc = createSolanaRpc(rpcUrl);
   const message = decodeMessage(base64Tx);
+if (!Array.isArray(message.instructions)) {
+    return {
+      simOk: false,
+      simError: 'unreadable format',
+      sentLamports: null,
+      flags: ['This transaction is in a format this checker cannot read yet. Do not sign it through this checker.'],
+      transfers: [],
+      verdict: 'danger',
+    };
+  }
   const accounts = await allAccountsOf(rpc, message);
   // Include the wallet in the account list so its SOL balance is measured too
   const addresses = owner && !accounts.includes(owner) ? [...accounts, owner] : accounts;
@@ -219,6 +229,14 @@ export async function checkTransaction(
   }
 
   const simOk = value.err === null;
+if (!simOk) {
+    const text = JSON.stringify(value.err, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
+    transfers.push(
+      text.includes('InsufficientFunds')
+        ? 'This wallet does not have enough SOL to run this transaction. Add SOL and check again.'
+        : `The network reported an error: ${text.slice(0, 120)}`,
+    );
+  }
 
   // 6. How much SOL and tokens leave the wallet
   let sentLamports = null;
