@@ -31,6 +31,7 @@ export default async function handler(req, res) {
       verdict: r.verdict,
     });
   } catch (err) {
+    console.error('check failed:', err.message);
     return res.status(400).json({ error: 'Could not read this transaction.' });
   }
 }
