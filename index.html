@@ -232,7 +232,7 @@
 
         const sol = r.sentLamports === null ? null : Number(r.sentLamports) / 1e9;
 
-        if (!r.simOk) addDetail('The simulation failed, so this transaction would not run as written.', 'warn');
+        if (!r.simOk && r.simReason) addDetail('r.simReason, 'warn');
         if (!owner) addDetail('Connect Phantom to see how much SOL would leave your wallet.');
         else if (r.simOk) addDetail(`SOL leaving your wallet, including the fee: ${sol} SOL`);
         r.flags.forEach((f) => addDetail(f, 'warn'));
