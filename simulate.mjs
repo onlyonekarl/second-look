@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs';
 import {
   address,
   appendTransactionMessageInstruction,
@@ -35,6 +36,7 @@ const message = pipe(
 );
 
 const base64Tx = getBase64EncodedWireTransaction(compileTransaction(message));
+writeFileSync('tx.txt', base64Tx);
 
 const { value } = await rpc.simulateTransaction(base64Tx, {
   encoding: 'base64',
