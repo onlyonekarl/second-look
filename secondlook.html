@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Second Look</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+    textarea { width: 100%; height: 8rem; font-family: monospace; font-size: 0.9rem; box-sizing: border-box; }
+    button { padding: 0.6rem 1rem; font-size: 1rem; margin: 0.5rem 0; cursor: pointer; }
+    #results p { margin: 0.4rem 0; }
+    .warn { color: #b00020; font-weight: bold; }
+    .ok { color: #1b5e20; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Second Look</h1>
+  <p>A safety check for Solana transactions, before you sign. Devnet only.</p>
+
+  <button id="connect">Connect Phantom</button>
+  <p id="wallet">Not connected.</p>
+
+  <h3>Transaction to check</h3>
+  <textarea id="tx" placeholder="Paste a base64 transaction here"></textarea>
+  <br>
+  <button id="check">Check transaction</button>
+
+  <div id="results"></div>
+
+  <script type="module">
+    import {
+      address,
+      createSolanaRpc,
+      getCompiledTransactionMessageDecoder,
+      getTransactionDecoder,
+    } from 'https://esm.sh/@solana/kit@6';
+
+    const rpc = createSolanaRpc('https://api.devnet.solana.com');
+    const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+    const $ = (id) => document.getElementById(id);
+    let owner = null;
+
+    function line(text, cls = '') {
+      const p = document.createElement('p');
+      p.textContent = text;
+      if (cls) p.className = cls;
+      $('results').appendChild(p);
+    }
+
+    $('connect').onclick = async () => {
+      const provider = window.phantom?.solana;
+      if (!provider?.isPhantom) {
+        $('wallet').textContent = 'Phantom not found. Install the Phantom extension, then reload.';
+        return;
+      }
+      try {
+        const { publicKey } = await provider.connect();
+        owner = publicKey.toString();
+        const { value } = await rpc.getBalance(address(owner)).send();
+        $('wallet').textContent = `Connected: ${owner} (devnet balance: ${Number(value) / 1e9} SOL)`;
+      } catch (err) {
+        $('wallet').textContent = `Could not connect: ${err.message}`;
+      }
+    };
+
+    $('check').onclick = async () => {
+      $('results').innerHTML = '';
+      const base64Tx = $('tx').value.trim();
+      if (!base64Tx) {
+        line('Paste a transaction first.', 'warn');
+        return;
+      }
+      try {
+        // Read the instructions
+        const bytes = Uint8Array.from(atob(base64Tx), (c) => c.charCodeAt(0));
+        const wire = getTransactionDecoder().decode(bytes);
+        const message = getCompiledTransactionMessageDecoder().decode(wire.messageBytes);
+
+        const flags = [];
+        for (const ix of message.instructions) {
+          if (message.staticAccounts[ix.programAddressIndex] !== TOKEN_PROGRAM) continue;
+          const kind = ix.data[0];
+          if (kind === 4 || kind === 13) {
+            flags.push('Token approval: this gives another address the right to spend your tokens.');
+          }
+          if (kind === 6) {
+            flags.push('Ownership change: this hands control of a token account to someone else.');
+          }
+        }
+
+        // Simulate, without sending anything
+        const before = owner ? (await rpc.getBalance(address(owner)).send()).value : null;
+        const { value } = await rpc.simulateTransaction(base64Tx, {
+          encoding: 'base64',
+          sigVerify: false,
+          replaceRecentBlockhash: true,
+          ...(owner ? { accounts: { encoding: 'base64', addresses: [owner] } } : {}),
+        }).send();
+
+        const simOk = value.err === null;
+        const sent = simOk && owner ? before - (value.accounts?.[0]?.lamports ?? before) : null;
+
+        if (!simOk) line('Simulation failed: this transaction would not run as written.', 'warn');
+        if (!owner) line('Connect Phantom to see how much SOL would leave your wallet.');
+        else if (simOk) line(`SOL leaving your wallet (including fee): ${Number(sent) / 1e9} SOL`);
+        flags.forEach((f) => line(f, 'warn'));
+
+        if (flags.length > 0) line('Verdict: do not sign until you understand these flags.', 'warn');
+        else if (sent !== null && sent > 0n) line('Verdict: review carefully. SOL would leave your wallet.', 'warn');
+        else if (simOk) line('Verdict: no approval or ownership flags found.', 'ok');
+      } catch (err) {
+        line(`Could not check this transaction: ${err.message}`, 'warn');
+      }
+    };
+  </script>
+</body>
+</html>
