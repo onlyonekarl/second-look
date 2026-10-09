@@ -135,7 +135,7 @@
       <h2>1 · Connect your wallet</h2>
       <div class="row">
         <button id="connect">Connect Phantom</button>
-        <span class="pill">Devnet</span>
+        <span class="pill">Mainnet</span>
       </div>
       <p id="wallet">Not connected yet.</p>
       <div id="phantomBox" hidden>
@@ -159,26 +159,17 @@
       <div id="details"></div>
     </div>
 
-    <footer>Second Look simulates transactions on Solana devnet. It never signs or sends anything.</footer>
+    <footer>Second Look simulates transactions on Solana mainnet. It never signs or sends anything.</footer>
   </div>
 
-  <script type="importmap">
-    { "imports": { "@solana/kit": "https://esm.sh/@solana/kit@6" } }
-  </script>
   <script type="module">
-    import { address, createSolanaRpc } from '@solana/kit';
-    import { checkTransaction } from './checker.js';
-
-    const rpc = createSolanaRpc('https://api.devnet.solana.com');
     const $ = (id) => document.getElementById(id);
     const short = (a) => `${a.slice(0, 6)}…${a.slice(-6)}`;
     let owner = null;
 
-    // On a phone without Phantom, show a button that opens this page in Phantom's browser
+    // On a phone without Phantom, offer a button that opens this page in Phantom's browser
     if (!window.phantom?.solana && /Android|iPhone|iPad/i.test(navigator.userAgent)) {
-      const page = 'https://onlyonekarl.github.io/second-look/';
-      const origin = 'https://onlyonekarl.github.io';
-      $('openInPhantom').href = `https://phantom.app/ul/browse/${encodeURIComponent(page)}?ref=${encodeURIComponent(origin)}`;
+      $('openInPhantom').href = `https://phantom.app/ul/browse/${encodeURIComponent(location.href)}?ref=${encodeURIComponent(location.origin)}`;
       $('phantomBox').hidden = false;
     }
 
@@ -204,7 +195,59 @@
       try {
         const { publicKey } = await provider.connect();
         owner = publicKey.toString();
-        const { value } = await rpc.getBalance(address(owner)).send();
-        $('wallet').textContent = `${short(owner)} · ${Number(value) / 1e9} SOL on devnet`;
+        $('wallet').textContent = `Connected: ${short(owner)}`;
         $('connect').textContent = 'Connected';
-        $('connect').
+        $('connect').disabled = true;
+      } catch (err) {
+        $('wallet').textContent = `Could not connect: ${err.message}`;
+      }
+    };
+
+    $('check').onclick = async () => {
+      $('details').innerHTML = '';
+      const transaction = $('tx').value.trim();
+      if (!transaction) {
+        showVerdict('', 'Paste a transaction first.');
+        return;
+      }
+      showVerdict('', 'Checking…');
+
+      try {
+        const res = await fetch('/api/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transaction, owner }),
+        });
+        const r = await res.json();
+        if (!res.ok) {
+          showVerdict('danger', r.error || 'The check failed.');
+          return;
+        }
+
+        const sol = r.sentLamports === null ? null : Number(r.sentLamports) / 1e9;
+
+        if (!r.simOk) addDetail('The simulation failed, so this transaction would not run as written.', 'warn');
+        if (!owner) addDetail('Connect Phantom to see how much SOL would leave your wallet.');
+        else if (r.simOk) addDetail(`SOL leaving your wallet, including the fee: ${sol} SOL`);
+        r.flags.forEach((f) => addDetail(f, 'warn'));
+        r.transfers.forEach((t) => addDetail(t, 'note'));
+
+        if (r.flags.length > 0) {
+          showVerdict('danger', 'Do not sign until you understand these flags.');
+        } else if (!r.simOk) {
+          showVerdict('danger', 'Do not sign. This transaction would fail.');
+        } else if (r.verdict === 'review') {
+          const parts = [];
+          if (sol !== null && sol > 0) parts.push('SOL would leave your wallet');
+          if (r.transfers.length > 0) parts.push('tokens would move');
+          showVerdict('review', `Review carefully: ${parts.join(' and ')}.`);
+        } else {
+          showVerdict('ok', 'No approval or ownership flags found.');
+        }
+      } catch (err) {
+        showVerdict('danger', `Could not check this transaction: ${err.message}`);
+      }
+    };
+  </script>
+</body>
+</html>
