@@ -12,9 +12,12 @@ const TOKEN_PROGRAMS = [SPL_TOKEN, TOKEN_2022];
 const SYSTEM_PROGRAM = '11111111111111111111111111111111';
 const TOKEN_PROGRAM_NAMES = ['spl-token', 'spl-token-2022']; // as the RPC names them
 const TOKEN_ACCOUNT_LENGTH = 165;
-const TLV_OFFSET = 166; // Token-2022 extension entries start here
+const TLV_OFFSET = 166;          // Token-2022 extension entries start here
+const LOOKUP_TABLE_HEADER = 56;  // lookup table addresses start after this many bytes
 const EXT_PERMANENT_DELEGATE = 12;
 const EXT_TRANSFER_HOOK = 14;
+// Token-2022 extensions that only describe the token (metadata and grouping), not risks
+const DESCRIPTIVE_EXTENSIONS = [18, 19, 20, 21, 22, 23];
 
 // Direct token instructions: the first data byte says which one
 const TOKEN_KIND = { 3: 'transfer', 12: 'transfer', 4: 'approve', 13: 'approve', 6: 'setAuthority' };
@@ -79,6 +82,43 @@ export function mintExtensionTypes(base64Data) {
   return types;
 }
 
+// Reads accounts in batches, since the RPC takes up to 100 at a time
+async function getAccounts(rpc, list) {
+  const out = [];
+  for (let i = 0; i < list.length; i += 100) {
+    const chunk = (await rpc.getMultipleAccounts(list.slice(i, i + 100), { encoding: 'base64' }).send()).value;
+    out.push(...chunk);
+  }
+  return out;
+}
+
+// Every account a transaction uses: static accounts, then accounts loaded from address lookup tables
+async function allAccountsOf(rpc, message) {
+  const lookups = message.addressTableLookups ?? [];
+  if (lookups.length === 0) return [...message.staticAccounts];
+  const tables = await getAccounts(rpc, lookups.map((l) => l.lookupTableAddress));
+  const writable = [];
+  const readonly = [];
+  lookups.forEach((lookup, i) => {
+    const table = tables[i];
+    if (!table) throw new Error('A lookup table used by this transaction could not be loaded.');
+    const data = Buffer.from(table.data[0], 'base64');
+    const addresses = [];
+    for (let offset = LOOKUP_TABLE_HEADER; offset + 32 <= data.length; offset += 32) {
+      addresses.push(getAddressDecoder().decode(data.subarray(offset, offset + 32)));
+    }
+    for (const index of lookup.writableIndexes) {
+      if (addresses[index] === undefined) throw new Error('A lookup table index is out of range.');
+      writable.push(addresses[index]);
+    }
+    for (const index of lookup.readonlyIndexes) {
+      if (addresses[index] === undefined) throw new Error('A lookup table index is out of range.');
+      readonly.push(addresses[index]);
+    }
+  });
+  return [...message.staticAccounts, ...writable, ...readonly];
+}
+
 // Token accounts owned by the wallet that lost tokens during the simulation
 function tokenOutflows(preAccounts, simAccounts, owner) {
   const outflows = [];
@@ -104,15 +144,12 @@ export async function checkTransaction(
 ) {
   const rpc = createSolanaRpc(rpcUrl);
   const message = decodeMessage(base64Tx);
-  const staticAddresses = message.staticAccounts;
+  const accounts = await allAccountsOf(rpc, message);
   // Include the wallet in the account list so its SOL balance is measured too
-  const addresses = owner && !staticAddresses.includes(owner) ? [...staticAddresses, owner] : staticAddresses;
+  const addresses = owner && !accounts.includes(owner) ? [...accounts, owner] : accounts;
 
   const flags = [];     // stop: do not sign until you understand these
   const transfers = []; // review: token moves and risky token settings
-if (message.addressTableLookups?.length) {
-    transfers.push('This transaction uses address lookup tables, so this check reads only part of it. Review it in full before you sign.');
-  }
 
   // Records a finding, whether the transaction calls the program itself or another program does
   const add = (kindName, calledByOtherProgram) => {
@@ -124,7 +161,7 @@ if (message.addressTableLookups?.length) {
 
   // 1. Instructions the transaction calls directly
   for (const ix of message.instructions) {
-    const program = message.staticAccounts[ix.programAddressIndex];
+    const program = accounts[ix.programAddressIndex];
     if (TOKEN_PROGRAMS.includes(program)) {
       const kind = TOKEN_KIND[ix.data[0]];
       if (kind) add(kind, false);
@@ -134,8 +171,8 @@ if (message.addressTableLookups?.length) {
     }
   }
 
-  // 2. Read token accounts and the wallet's SOL before the simulation
-  const preAccounts = (await rpc.getMultipleAccounts(addresses, { encoding: 'base64' }).send()).value;
+  // 2. Read every account and the wallet's SOL before the simulation
+  const preAccounts = await getAccounts(rpc, addresses);
   const before = owner ? (await rpc.getBalance(address(owner)).send()).value : null;
 
   // 3. Token-2022 risks on the mints behind the token accounts in this transaction
@@ -146,15 +183,16 @@ if (message.addressTableLookups?.length) {
     if (acc) mints.add(acc.mint);
   }
   if (mints.size > 0) {
-    const mintAccounts = (await rpc.getMultipleAccounts([...mints], { encoding: 'base64' }).send()).value;
+    const mintAccounts = await getAccounts(rpc, [...mints]);
+    const known = [EXT_PERMANENT_DELEGATE, EXT_TRANSFER_HOOK, ...DESCRIPTIVE_EXTENSIONS];
     for (const m of mintAccounts) {
       if (!m || m.owner !== TOKEN_2022) continue;
       const types = mintExtensionTypes(m.data[0]);
       if (types.includes(EXT_PERMANENT_DELEGATE)) add('permanentDelegate', false);
-if (types.some((t) => ![EXT_PERMANENT_DELEGATE, EXT_TRANSFER_HOOK, 18, 19, 20, 21, 22, 23].includes(t))) {
+      if (types.includes(EXT_TRANSFER_HOOK)) add('transferHook', false);
+      if (types.some((t) => !known.includes(t))) {
         transfers.push('Token-2022 feature: this token uses a feature the checker does not read. Check it before you sign.');
       }
-      if (types.includes(EXT_TRANSFER_HOOK)) add('transferHook', false);
     }
   }
 
