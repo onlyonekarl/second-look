@@ -51,7 +51,7 @@
       border: 1px solid var(--green);
       color: var(--green);
     }
-    button {
+    button, .open-phantom {
       font: inherit;
       font-weight: 600;
       color: #0E1116;
@@ -60,9 +60,12 @@
       border-radius: 10px;
       padding: 0.7rem 1.1rem;
       cursor: pointer;
+      display: inline-block;
+      text-decoration: none;
     }
-    button:hover { filter: brightness(1.08); }
+    button:hover, .open-phantom:hover { filter: brightness(1.08); }
     button:disabled { opacity: 0.55; cursor: default; }
+    .open-phantom { margin-top: 0.75rem; }
     .hint { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.6rem; display: block; }
     textarea {
       width: 100%;
@@ -133,6 +136,10 @@
         <span class="pill">Devnet</span>
       </div>
       <p id="wallet">Not connected yet.</p>
+      <div id="phantomBox" hidden>
+        <a id="openInPhantom" class="open-phantom" href="#">Open in Phantom app</a>
+        <p class="hint" style="margin-top: 0.5rem;">On a phone, this opens the page in Phantom's browser so you can connect.</p>
+      </div>
     </div>
 
     <div class="card">
@@ -167,6 +174,14 @@
     const short = (a) => `${a.slice(0, 6)}…${a.slice(-6)}`;
     let owner = null;
 
+    // On a phone without Phantom, show a button that opens this page in Phantom's browser
+    if (!window.phantom?.solana && /Android|iPhone|iPad/i.test(navigator.userAgent)) {
+      const page = 'https://onlyonekarl.github.io/second-look/';
+      const origin = 'https://onlyonekarl.github.io';
+      $('openInPhantom').href = `https://phantom.app/ul/browse/${encodeURIComponent(page)}?ref=${encodeURIComponent(origin)}`;
+      $('phantomBox').hidden = false;
+    }
+
     function showVerdict(kind, text) {
       $('resultsCard').hidden = false;
       $('verdict').className = kind;
@@ -183,7 +198,7 @@
     $('connect').onclick = async () => {
       const provider = window.phantom?.solana;
       if (!provider?.isPhantom) {
-        $('wallet').textContent = 'Phantom not found. Install the Phantom extension, then reload.';
+        $('wallet').textContent = 'Phantom not found here. On a computer, install the Phantom extension and reload. On a phone, tap Open in Phantom app below.';
         return;
       }
       try {
