@@ -160,8 +160,8 @@
     </div>
     <div class="card">
   <h2>What this checks, and what it doesn't</h2>
-  <p class="hint">It checks: SOL leaving your wallet, token approvals, ownership changes, and token transfers made directly by the transaction, for SPL Token and Token-2022.</p>
-  <p class="hint">It doesn't check: token moves made inside another program's instructions, token balance changes, Token-2022 extension behavior, or whether a website or program is trustworthy.</p>
+  <p class="hint">It checks: SOL leaving your wallet, token approvals, ownership changes, and token transfers, including transfers made by other programs in the same transaction. This covers SPL Token and Token-2022.</p>
+  <p class="hint">It doesn't check: token balance changes, Token-2022 extension behavior, or whether a website or program is trustworthy. Transfers made by other programs are only checked when the transaction simulates successfully.</p>
   <p class="hint">A passing result is not a guarantee. Use it as one check among several, and never sign anything you don't understand.</p>
 </div>
 
