@@ -136,6 +136,15 @@ function tokenOutflows(preAccounts, simAccounts, owner) {
   return outflows;
 }
 
+// Turns a simulation error into a plain-language reason. It is shown apart from the findings.
+function describeSimError(err) {
+  const text = JSON.stringify(err, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
+  if (/InsufficientFunds|AccountNotFound/.test(text)) {
+    return 'This wallet does not have enough SOL to run this transaction. Add SOL and check again.';
+  }
+  return `The network reported an error: ${text.slice(0, 120)}`;
+}
+
 // Checks one base64 transaction. Optional: the wallet to check, and the RPC URL.
 export async function checkTransaction(
   base64Tx,
@@ -144,16 +153,20 @@ export async function checkTransaction(
 ) {
   const rpc = createSolanaRpc(rpcUrl);
   const message = decodeMessage(base64Tx);
-if (!Array.isArray(message.instructions)) {
+
+  // A format this checker cannot read: stop, and say so
+  if (!Array.isArray(message.instructions)) {
     return {
       simOk: false,
       simError: 'unreadable format',
+      simReason: null,
       sentLamports: null,
       flags: ['This transaction is in a format this checker cannot read yet. Do not sign it through this checker.'],
       transfers: [],
       verdict: 'danger',
     };
   }
+
   const accounts = await allAccountsOf(rpc, message);
   // Include the wallet in the account list so its SOL balance is measured too
   const addresses = owner && !accounts.includes(owner) ? [...accounts, owner] : accounts;
@@ -229,14 +242,6 @@ if (!Array.isArray(message.instructions)) {
   }
 
   const simOk = value.err === null;
-if (!simOk) {
-    const text = JSON.stringify(value.err, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
-    transfers.push(
-      text.includes('InsufficientFunds')
-        ? 'This wallet does not have enough SOL to run this transaction. Add SOL and check again.'
-        : `The network reported an error: ${text.slice(0, 120)}`,
-    );
-  }
 
   // 6. How much SOL and tokens leave the wallet
   let sentLamports = null;
@@ -250,5 +255,13 @@ if (!simOk) {
   if (flags.length > 0 || !simOk) verdict = 'danger';
   else if ((sentLamports !== null && sentLamports > 0n) || transfers.length > 0) verdict = 'review';
 
-  return { simOk, simError: value.err, sentLamports, flags, transfers, verdict };
+  return {
+    simOk,
+    simError: value.err,
+    simReason: simOk ? null : describeSimError(value.err),
+    sentLamports,
+    flags,
+    transfers,
+    verdict,
+  };
 }
