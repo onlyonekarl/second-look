@@ -10,10 +10,17 @@ const SPL_TOKEN = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 const TOKEN_2022 = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
 const TOKEN_PROGRAMS = [SPL_TOKEN, TOKEN_2022];
 const SYSTEM_PROGRAM = '11111111111111111111111111111111';
+const COMPUTE_BUDGET = 'ComputeBudget111111111111111111111111111111';
+const ASSOCIATED_TOKEN = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
+const MEMO = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
+const VOTE_PROGRAM = 'Vote111111111111111111111111111111111111111';
+// Programs this checker understands. A transaction that calls anything else gets a review note.
+const KNOWN_PROGRAMS = [SYSTEM_PROGRAM, SPL_TOKEN, TOKEN_2022, COMPUTE_BUDGET, ASSOCIATED_TOKEN, MEMO, VOTE_PROGRAM];
 const TOKEN_PROGRAM_NAMES = ['spl-token', 'spl-token-2022']; // as the RPC names them
 const TOKEN_ACCOUNT_LENGTH = 165;
-const TLV_OFFSET = 166;          // Token-2022 extension entries start here
-const LOOKUP_TABLE_HEADER = 56;  // lookup table addresses start after this many bytes
+const TLV_OFFSET = 166;              // Token-2022 extension entries start here
+const LOOKUP_TABLE_HEADER = 56;      // lookup table addresses start after this many bytes
+const MAX_SIMULATED_ACCOUNTS = 100;  // the RPC limits account lists to this many
 const EXT_PERMANENT_DELEGATE = 12;
 const EXT_TRANSFER_HOOK = 14;
 // Token-2022 extensions that only describe the token (metadata and grouping), not risks
@@ -48,6 +55,17 @@ function decodeMessage(base64Tx) {
   const bytes = Uint8Array.from(atob(base64Tx), (c) => c.charCodeAt(0));
   const wire = getTransactionDecoder().decode(bytes);
   return getCompiledTransactionMessageDecoder().decode(wire.messageBytes);
+}
+
+// One entry per instruction, for both version 0 and version 1 messages
+function instructionsOf(message) {
+  if (Array.isArray(message.instructions)) {
+    return message.instructions.map((ix) => ({ programIndex: ix.programAddressIndex, data: ix.data }));
+  }
+  return message.instructionHeaders.map((h, i) => ({
+    programIndex: h.programAccountIndex,
+    data: Uint8Array.from(message.instructionPayloads[i].instructionData),
+  }));
 }
 
 // The wallet that pays the fee. This is the wallet that would sign.
@@ -119,7 +137,8 @@ async function allAccountsOf(rpc, message) {
   return [...message.staticAccounts, ...writable, ...readonly];
 }
 
-// Token accounts owned by the wallet that lost tokens during the simulation
+// Token accounts owned by the wallet that lost tokens during the simulation.
+// The two arrays must line up: each pre-state with its simulated post-state.
 function tokenOutflows(preAccounts, simAccounts, owner) {
   const outflows = [];
   preAccounts.forEach((pre, i) => {
@@ -155,7 +174,7 @@ export async function checkTransaction(
   const message = decodeMessage(base64Tx);
 
   // A format this checker cannot read: stop, and say so
-  if (!Array.isArray(message.instructions)) {
+  if (!Array.isArray(message.instructions) && !Array.isArray(message.instructionHeaders)) {
     return {
       simOk: false,
       simError: 'unreadable format',
@@ -172,7 +191,7 @@ export async function checkTransaction(
   const addresses = owner && !accounts.includes(owner) ? [...accounts, owner] : accounts;
 
   const flags = [];     // stop: do not sign until you understand these
-  const transfers = []; // review: token moves and risky token settings
+  const transfers = []; // review: token moves, risky token settings, unknown programs
 
   // Records a finding, whether the transaction calls the program itself or another program does
   const add = (kindName, calledByOtherProgram) => {
@@ -183,8 +202,10 @@ export async function checkTransaction(
   };
 
   // 1. Instructions the transaction calls directly
-  for (const ix of message.instructions) {
-    const program = accounts[ix.programAddressIndex];
+  const unknownPrograms = new Set();
+  for (const ix of instructionsOf(message)) {
+    const program = accounts[ix.programIndex];
+    if (!KNOWN_PROGRAMS.includes(program)) unknownPrograms.add(program);
     if (TOKEN_PROGRAMS.includes(program)) {
       const kind = TOKEN_KIND[ix.data[0]];
       if (kind) add(kind, false);
@@ -192,6 +213,9 @@ export async function checkTransaction(
       const kind = DIRECT_SYSTEM_KIND[Buffer.from(ix.data).readUInt32LE(0)];
       if (kind) add(kind, false);
     }
+  }
+  for (const program of unknownPrograms) {
+    transfers.push(`This transaction calls a program the checker does not recognize (${program.slice(0, 6)}…). Only sign if you know what it does.`);
   }
 
   // 2. Read every account and the wallet's SOL before the simulation
@@ -219,16 +243,39 @@ export async function checkTransaction(
     }
   }
 
-  // 4. Simulate, without sending anything
-  const { value } = await rpc.simulateTransaction(base64Tx, {
+  // 4. Choose what to measure: the wallet first, then its token accounts.
+  // The RPC limits account lists to 100, so this list is capped.
+  const watched = [];
+  if (owner) {
+    watched.push(addresses.indexOf(owner));
+    addresses.forEach((a, i) => {
+      if (a === owner) return;
+      const pre = preAccounts[i];
+      if (!pre || !TOKEN_PROGRAMS.includes(pre.owner)) return;
+      const acc = readTokenAccount(pre.data[0]);
+      if (acc && acc.owner === owner) watched.push(i);
+    });
+  }
+  const truncated = watched.length > MAX_SIMULATED_ACCOUNTS;
+  const used = watched.slice(0, MAX_SIMULATED_ACCOUNTS);
+  const usedAddresses = used.map((i) => addresses[i]);
+
+  // 5. Simulate, without sending anything
+  const simConfig = {
     encoding: 'base64',
     sigVerify: false,
     replaceRecentBlockhash: true,
     innerInstructions: true,
-    accounts: { encoding: 'base64', addresses },
-  }).send();
+    ...(usedAddresses.length > 0 ? { accounts: { encoding: 'base64', addresses: usedAddresses } } : {}),
+  };
+  let value;
+  try {
+    ({ value } = await rpc.simulateTransaction(base64Tx, simConfig).send());
+  } catch (err) {
+    throw new Error(`simulation: ${err.message} (requested ${usedAddresses.length} accounts)`);
+  }
 
-  // 5. Calls that other programs make inside the transaction (returned only if the simulation succeeds)
+  // 6. Calls that other programs make inside the transaction (returned only if the simulation succeeds)
   for (const group of value.innerInstructions ?? []) {
     for (const ix of group.instructions) {
       if (TOKEN_PROGRAM_NAMES.includes(ix.program)) {
@@ -243,12 +290,16 @@ export async function checkTransaction(
 
   const simOk = value.err === null;
 
-  // 6. How much SOL and tokens leave the wallet
+  // 7. How much SOL and tokens leave the wallet
   let sentLamports = null;
   if (simOk && owner) {
-    const ownerIndex = addresses.indexOf(owner);
-    sentLamports = before - (value.accounts?.[ownerIndex]?.lamports ?? before);
-    transfers.push(...tokenOutflows(preAccounts, value.accounts, owner));
+    // The wallet is always first in the simulated list
+    sentLamports = before - (value.accounts?.[0]?.lamports ?? before);
+    const watchedPre = used.map((i) => preAccounts[i]);
+    transfers.push(...tokenOutflows(watchedPre, value.accounts ?? [], owner));
+    if (truncated) {
+      transfers.push(`Balances were measured for ${MAX_SIMULATED_ACCOUNTS} of your token accounts only. Review the rest before you sign.`);
+    }
   }
 
   let verdict = 'ok';
